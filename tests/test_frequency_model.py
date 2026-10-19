@@ -16,7 +16,7 @@ WHITE_COLUMNS = [
 
 
 def make_sample_draws():
-    """Create a small, artificial dataset for testing."""
+    """Create artificial drawings for testing."""
 
     numbers = [
         [1, 2, 3, 4, 5],
@@ -30,13 +30,16 @@ def make_sample_draws():
 
     for index, white_numbers in enumerate(numbers):
         row = {
-            "draw_date": pd.Timestamp("2026-01-01")
-            + pd.Timedelta(days=3 * index),
+            "draw_date": (
+                pd.Timestamp("2026-01-01")
+                + pd.Timedelta(days=3 * index)
+            ),
             "special": index + 1,
         }
 
         for column, number in zip(
-            WHITE_COLUMNS, white_numbers
+            WHITE_COLUMNS,
+            white_numbers,
         ):
             row[column] = number
 
@@ -49,16 +52,16 @@ def test_rank_numbers_by_frequency():
     history = make_sample_draws().iloc[:2]
 
     ranking = model.rank_numbers_by_frequency(
-        history=history,
-        columns=WHITE_COLUMNS,
-        pool_max=10,
-        rng=random.Random(42),
+        history,
+        WHITE_COLUMNS,
+        10,
+        random.Random(42),
     )
 
-    # The numbers 1, 2, 3 and 4 each appeared twice.
+    # These four numbers each appear twice.
     assert set(ranking[:4]) == {1, 2, 3, 4}
 
-    # Every legal number appears exactly once in the ranking.
+    # Every legal number appears exactly once.
     assert len(ranking) == 10
     assert set(ranking) == set(range(1, 11))
 
@@ -66,130 +69,77 @@ def test_rank_numbers_by_frequency():
 def test_generate_frequency_ticket_obeys_number_ranges():
     history = make_sample_draws().iloc[:3]
 
-    white_numbers, special_number = (
-        model.generate_frequency_ticket(
-            history=history,
-            special_column="special",
-            white_pool_max=10,
-            special_pool_max=5,
-            rng=random.Random(42),
-        )
+    white, special = model.generate_frequency_ticket(
+        history,
+        "special",
+        10,
+        5,
+        random.Random(42),
     )
 
-    assert len(white_numbers) == 5
-    assert len(set(white_numbers)) == 5
-    assert white_numbers == sorted(white_numbers)
-
-    assert all(1 <= number <= 10 for number in white_numbers)
-    assert 1 <= special_number <= 5
+    assert len(white) == 5
+    assert len(set(white)) == 5
+    assert white == sorted(white)
+    assert all(1 <= number <= 10 for number in white)
+    assert 1 <= special <= 5
 
 
 def test_frequency_ticket_is_reproducible():
     history = make_sample_draws().iloc[:3]
 
     first = model.generate_frequency_ticket(
-        history,
-        "special",
-        10,
-        5,
-        random.Random(42),
+        history, "special", 10, 5, random.Random(42)
     )
 
     second = model.generate_frequency_ticket(
-        history,
-        "special",
-        10,
-        5,
-        random.Random(42),
+        history, "special", 10, 5, random.Random(42)
     )
 
     assert first == second
 
 
-def test_score_ticket_counts_matches_correctly():
-    actual = pd.Series({
-        "white_1": 1,
-        "white_2": 2,
-        "white_3": 3,
-        "white_4": 4,
-        "white_5": 5,
-        "special": 2,
-    })
-
-    score = model.score_ticket(
-        predicted_white=[1, 2, 8, 9, 10],
-        predicted_special=2,
-        actual_row=actual,
-        special_column="special",
-    )
-
-    assert score == {
-        "white_matches": 2,
-        "has_white_match": 1,
-        "special_match": 1,
-    }
-
-
-def test_backtest_uses_only_prior_draws():
+def test_predictions_use_only_prior_draws():
     df = make_sample_draws()
 
-    results = model.run_backtest(
-        df=df,
+    results = model.generate_predictions_for_window(
+        draws=df,
         special_column="special",
         white_pool_max=10,
         special_pool_max=5,
         lookback_draws=2,
     )
 
-    # Five draws minus two initial history draws = three predictions.
+    # Five draws minus two initial history draws.
     assert len(results) == 3
 
-    # The first prediction uses only draws 1 and 2.
-    assert results.iloc[0]["history_start_date"] == (
-        df.iloc[0]["draw_date"].date().isoformat()
-    )
-    assert results.iloc[0]["history_end_date"] == (
-        df.iloc[1]["draw_date"].date().isoformat()
-    )
+    first = results.iloc[0]
 
-    assert results.iloc[0]["target_draw_date"] == (
-        df.iloc[2]["draw_date"].date().isoformat()
-    )
+    assert first["history_start_date"] == "2026-01-01"
+    assert first["history_end_date"] == "2026-01-04"
+    assert first["target_draw_date"] == "2026-01-07"
+    assert first["lookback_draws"] == 2
 
 
 def test_target_result_does_not_change_its_own_prediction():
     df = make_sample_draws()
 
-    original = model.run_backtest(
-        df,
-        "special",
-        10,
-        5,
-        lookback_draws=2,
+    original = model.generate_predictions_for_window(
+        df, "special", 10, 5, lookback_draws=2
     )
 
     modified_df = df.copy()
 
-    # Change only the first target drawing's actual result.
-    # The prediction for that drawing must remain unchanged.
-    modified_df.loc[
-        modified_df.index[2],
-        WHITE_COLUMNS
-    ] = [2, 5, 7, 8, 9]
+    # Change only the actual numbers of the first target drawing.
+    modified_df.loc[2, WHITE_COLUMNS] = [2, 5, 7, 8, 9]
+    modified_df.loc[2, "special"] = 5
 
-    modified_df.loc[modified_df.index[2], "special"] = 5
-
-    modified = model.run_backtest(
-        modified_df,
-        "special",
-        10,
-        5,
-        lookback_draws=2,
+    modified = model.generate_predictions_for_window(
+        modified_df, "special", 10, 5, lookback_draws=2
     )
 
     prediction_columns = [
-        *(f"frequency_white_{i}" for i in range(1, 6)),
-        "frequency_special",
+        *(f"predicted_white_{i}" for i in range(1, 6)),
+        "predicted_special",
     ]
 
     assert (
@@ -198,78 +148,54 @@ def test_target_result_does_not_change_its_own_prediction():
     )
 
 
-def test_random_simulations_return_expected_metrics():
+def test_invalid_lookback_is_rejected():
     df = make_sample_draws()
 
-    results = model.run_random_simulations(
-        df=df,
+    with pytest.raises(ValueError, match="at least 1"):
+        model.generate_predictions_for_window(
+            df, "special", 10, 5, lookback_draws=0
+        )
+
+
+def test_insufficient_history_is_rejected():
+    df = make_sample_draws()
+
+    with pytest.raises(ValueError, match="Not enough drawings"):
+        model.generate_predictions_for_window(
+            df, "special", 10, 5, lookback_draws=5
+        )
+
+
+def test_duplicate_drawing_dates_are_rejected():
+    df = make_sample_draws()
+    df.loc[1, "draw_date"] = df.loc[0, "draw_date"]
+
+    with pytest.raises(ValueError, match="unique"):
+        model.generate_predictions_for_window(
+            df, "special", 10, 5, lookback_draws=2
+        )
+
+
+def test_each_lookback_gets_a_separate_output_file(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(model, "PREDICTIONS_DIR", tmp_path)
+    monkeypatch.setattr(model, "LOOKBACK_WINDOWS", [2, 3])
+
+    model.generate_game_predictions(
+        game_name="Powerball",
+        draws=make_sample_draws(),
         special_column="special",
         white_pool_max=10,
         special_pool_max=5,
-        lookback_draws=2,
-        simulations=4,
     )
 
-    assert len(results) == 4
+    file_2 = tmp_path / "powerball_lookback_2.csv"
+    file_3 = tmp_path / "powerball_lookback_3.csv"
 
-    expected_columns = {
-        "simulation",
-        "average_white_matches",
-        "tickets_with_white_match_pct",
-        "special_ball_match_rate_pct",
-    }
+    assert file_2.exists()
+    assert file_3.exists()
 
-    assert expected_columns.issubset(results.columns)
-
-    assert results["average_white_matches"].between(0, 5).all()
-    assert results["tickets_with_white_match_pct"].between(
-        0, 100
-    ).all()
-    assert results["special_ball_match_rate_pct"].between(
-        0, 100
-    ).all()
-
-
-def test_random_simulations_are_reproducible():
-    df = make_sample_draws()
-
-    first = model.run_random_simulations(
-        df, "special", 10, 5,
-        lookback_draws=2,
-        simulations=4,
-    )
-
-    second = model.run_random_simulations(
-        df, "special", 10, 5,
-        lookback_draws=2,
-        simulations=4,
-    )
-
-    pd.testing.assert_frame_equal(first, second)
-
-
-def test_backtest_rejects_invalid_lookback():
-    df = make_sample_draws()
-
-    with pytest.raises(ValueError, match="at least 1"):
-        model.run_backtest(
-            df,
-            "special",
-            10,
-            5,
-            lookback_draws=0,
-        )
-
-
-def test_random_simulations_reject_zero_runs():
-    df = make_sample_draws()
-
-    with pytest.raises(ValueError, match="at least 1"):
-        model.run_random_simulations(
-            df,
-            "special",
-            10,
-            5,
-            lookback_draws=2,
-            simulations=0,
-        )
+    assert len(pd.read_csv(file_2)) == 3
+    assert len(pd.read_csv(file_3)) == 2
