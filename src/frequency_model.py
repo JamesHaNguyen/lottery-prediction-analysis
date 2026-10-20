@@ -150,6 +150,84 @@ def generate_predictions_for_window(
 
     return pd.DataFrame(predictions)
 
+def generate_next_draw_prediction(
+    draws,
+    special_column,
+    white_pool_max,
+    special_pool_max,
+    lookback_draws,
+    target_draw_date,
+):
+    """Generate one frequency-model ticket for a future drawing."""
+
+    if lookback_draws < 1:
+        raise ValueError("lookback_draws must be at least 1.")
+
+    df = draws.copy()
+    df["draw_date"] = pd.to_datetime(
+        df["draw_date"],
+        errors="coerce",
+    )
+
+    if df["draw_date"].isna().any():
+        raise ValueError("Drawing dates cannot contain missing values.")
+
+    if df["draw_date"].duplicated().any():
+        raise ValueError("Drawing dates must be unique.")
+
+    df = (
+        df.sort_values("draw_date")
+        .reset_index(drop=True)
+    )
+
+    if len(df) < lookback_draws:
+        raise ValueError(
+            f"Not enough historical drawings for lookback "
+            f"{lookback_draws}. Available: {len(df)}."
+        )
+
+    target_date = pd.to_datetime(
+        target_draw_date,
+        errors="raise",
+    ).strftime("%Y-%m-%d")
+
+    history = df.tail(lookback_draws).copy()
+    history_end = history.iloc[-1]["draw_date"]
+
+    if pd.Timestamp(target_date) <= history_end.normalize():
+        raise ValueError(
+            "The target drawing date must be after the latest "
+            "historical drawing used by the model."
+        )
+
+    # Make tie-breaking reproducible for this game, window,
+    # and target date.
+    rng = random.Random(
+        f"{FREQUENCY_SEED}:next:{lookback_draws}:{target_date}"
+    )
+
+    white_numbers, special_number = generate_frequency_ticket(
+        history=history,
+        special_column=special_column,
+        white_pool_max=white_pool_max,
+        special_pool_max=special_pool_max,
+        rng=rng,
+    )
+
+    prediction = {
+        "target_draw_date": target_date,
+        "lookback_draws": lookback_draws,
+        "history_start_date": (
+            history.iloc[0]["draw_date"].strftime("%Y-%m-%d")
+        ),
+        "history_end_date": history_end.strftime("%Y-%m-%d"),
+        "predicted_special": special_number,
+    }
+
+    for index, number in enumerate(white_numbers, start=1):
+        prediction[f"predicted_white_{index}"] = number
+
+    return prediction
 
 def generate_game_predictions(
     game_name,
