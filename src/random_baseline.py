@@ -1,6 +1,7 @@
 import csv
 import gzip
 import random
+import pandas as pd
 
 from src.lottery_data import (
     PROJECT_DIR,
@@ -142,6 +143,61 @@ def generate_random_predictions(
 
     return output_path
 
+def generate_next_random_prediction(
+    game_name,
+    draws,
+    white_pool_max,
+    special_pool_max,
+    target_draw_date,
+):
+    """Generate one reproducible random ticket for a future drawing."""
+
+    if draws.empty:
+        raise ValueError("Drawing data cannot be empty.")
+
+    if "draw_date" not in draws.columns:
+        raise ValueError("Drawing data must contain draw_date.")
+
+    dates = pd.to_datetime(
+        draws["draw_date"],
+        errors="raise",
+    )
+
+    latest_history_date = dates.max().strftime("%Y-%m-%d")
+    target_date = pd.to_datetime(
+        target_draw_date,
+        errors="raise",
+    ).strftime("%Y-%m-%d")
+
+    if target_date <= latest_history_date:
+        raise ValueError(
+            "The target drawing date must be after the latest "
+            "historical drawing."
+        )
+
+    game_prefix = game_name.lower().replace(" ", "_")
+
+    # Repeating the same game/date produces the same control ticket.
+    rng = random.Random(
+        f"{RANDOM_SEED}:{game_prefix}:next:{target_date}"
+    )
+
+    white_numbers, special_number = generate_ticket(
+        rng=rng,
+        white_pool_max=white_pool_max,
+        special_pool_max=special_pool_max,
+    )
+
+    prediction = {
+        "target_draw_date": target_date,
+        "history_end_date": latest_history_date,
+        "predicted_special": special_number,
+    }
+
+    for index, number in enumerate(white_numbers, start=1):
+        prediction[f"predicted_white_{index}"] = number
+
+    return prediction
 
 def main():
     """Generate random prediction files for both games."""
