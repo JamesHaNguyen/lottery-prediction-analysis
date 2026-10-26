@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   update-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     environment:
       name: github-pages
@@ -52,13 +52,13 @@ jobs:
         run: python -m src.export_website_predictions
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload website artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: website
 
       - name: Deploy website
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
