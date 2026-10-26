@@ -1,0 +1,185 @@
+{
+  "generated_at": "2026-10-26T20:10:57+00:00",
+  "games": {
+    "Powerball": {
+      "target_draw_date": "2026-10-26",
+      "latest_history_date": "2026-10-21",
+      "predictions": [
+        {
+          "model": "Frequency (lookback=10)",
+          "lookback_draws": 10,
+          "white_balls": [
+            4,
+            13,
+            32,
+            42,
+            44
+          ],
+          "special_ball": 9
+        },
+        {
+          "model": "Frequency (lookback=25)",
+          "lookback_draws": 25,
+          "white_balls": [
+            14,
+            21,
+            32,
+            42,
+            58
+          ],
+          "special_ball": 14
+        },
+        {
+          "model": "Frequency (lookback=50)",
+          "lookback_draws": 50,
+          "white_balls": [
+            14,
+            17,
+            42,
+            58,
+            59
+          ],
+          "special_ball": 3
+        },
+        {
+          "model": "Frequency (lookback=75)",
+          "lookback_draws": 75,
+          "white_balls": [
+            14,
+            16,
+            42,
+            44,
+            65
+          ],
+          "special_ball": 14
+        },
+        {
+          "model": "Frequency (lookback=100)",
+          "lookback_draws": 100,
+          "white_balls": [
+            3,
+            14,
+            30,
+            42,
+            64
+          ],
+          "special_ball": 3
+        },
+        {
+          "model": "Random baseline (control)",
+          "lookback_draws": null,
+          "white_balls": [
+            25,
+            36,
+            43,
+            51,
+            65
+          ],
+          "special_ball": 10
+        },
+        {
+          "model": "Markov",
+          "lookback_draws": null,
+          "white_balls": [
+            3,
+            17,
+            21,
+            23,
+            35
+          ],
+          "special_ball": 18
+        }
+      ]
+    },
+    "Mega Millions": {
+      "target_draw_date": "2026-10-27",
+      "latest_history_date": "2026-10-23",
+      "predictions": [
+        {
+          "model": "Frequency (lookback=10)",
+          "lookback_draws": 10,
+          "white_balls": [
+            7,
+            15,
+            40,
+            41,
+            68
+          ],
+          "special_ball": 8
+        },
+        {
+          "model": "Frequency (lookback=25)",
+          "lookback_draws": 25,
+          "white_balls": [
+            26,
+            30,
+            51,
+            57,
+            68
+          ],
+          "special_ball": 17
+        },
+        {
+          "model": "Frequency (lookback=50)",
+          "lookback_draws": 50,
+          "white_balls": [
+            2,
+            26,
+            30,
+            48,
+            51
+          ],
+          "special_ball": 12
+        },
+        {
+          "model": "Frequency (lookback=75)",
+          "lookback_draws": 75,
+          "white_balls": [
+            26,
+            30,
+            48,
+            51,
+            68
+          ],
+          "special_ball": 12
+        },
+        {
+          "model": "Frequency (lookback=100)",
+          "lookback_draws": 100,
+          "white_balls": [
+            13,
+            30,
+            51,
+            59,
+            63
+          ],
+          "special_ball": 12
+        },
+        {
+          "model": "Random baseline (control)",
+          "lookback_draws": null,
+          "white_balls": [
+            8,
+            13,
+            15,
+            45,
+            57
+          ],
+          "special_ball": 24
+        },
+        {
+          "model": "Markov",
+          "lookback_draws": null,
+          "white_balls": [
+            11,
+            17,
+            57,
+            58,
+            59
+          ],
+          "special_ball": 1
+        }
+      ]
+    }
+  }
+}
