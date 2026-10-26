@@ -14,6 +14,7 @@ from src.lottery_data import (
 PREDICTIONS_DIR = PROJECT_DIR / "reports" / "predictions"
 RANDOM_DIR = PREDICTIONS_DIR / "random"
 FREQUENCY_DIR = PREDICTIONS_DIR / "frequency"
+MARKOV_DIR = PREDICTIONS_DIR / "markov"
 REPORTS_DIR = PROJECT_DIR / "reports" / "model_comparison"
 
 LOOKBACK_WINDOWS = [10, 25, 50, 75, 100]
@@ -115,6 +116,48 @@ def filter_frequency_to_common_dates(
         .reset_index(drop=True)
     )
 
+def filter_markov_to_common_dates(predictions, common_dates):
+    """Keep Markov predictions for the shared evaluation dates."""
+
+    predictions = normalize_target_dates(predictions)
+
+    required_columns = {
+        "target_draw_date",
+        *PREDICTED_WHITE_COLUMNS,
+        "predicted_special",
+    }
+
+    missing_columns = required_columns - set(predictions.columns)
+
+    if missing_columns:
+        raise ValueError(
+            "Markov predictions are missing columns: "
+            f"{sorted(missing_columns)}"
+        )
+
+    if predictions["target_draw_date"].duplicated().any():
+        raise ValueError(
+            "Markov predictions contain duplicate target dates."
+        )
+
+    common_date_set = set(common_dates)
+    available_dates = set(predictions["target_draw_date"])
+    missing_dates = common_date_set - available_dates
+
+    if missing_dates:
+        raise ValueError(
+            "Markov predictions are missing "
+            f"{len(missing_dates)} common evaluation dates."
+        )
+
+    filtered = predictions[
+        predictions["target_draw_date"].isin(common_date_set)
+    ].copy()
+
+    return (
+        filtered.sort_values("target_draw_date")
+        .reset_index(drop=True)
+    )
 
 def filter_random_to_common_dates(
     predictions,
@@ -290,19 +333,18 @@ def summarize_random_simulations(scored_predictions):
     summary["special_ball_match_rate_pct"] *= 100
 
     return summary
-
+ 
 
 def compare_scores(
     game_name,
-    lookback,
-    frequency_scores,
+    model_name,
+    model_scores,
     random_metrics,
+    lookback=None,
 ):
-    """Compare a frequency model with matched random simulations."""
+    """Compare a model with random simulations on identical dates."""
 
-    frequency = summarize_prediction_scores(
-        frequency_scores
-    )
+    model = summarize_prediction_scores(model_scores)
 
     metrics = [
         (
@@ -321,11 +363,17 @@ def compare_scores(
 
     summary_rows = []
 
-    print(f"\n{game_name} | Lookback window: {lookback}")
+    label = (
+        f"Lookback window: {lookback}"
+        if lookback is not None
+        else model_name
+    )
+
+    print(f"\n{game_name} | {label}")
     print("-" * 55)
 
-    for metric, label in metrics:
-        frequency_value = frequency[metric]
+    for metric, description in metrics:
+        model_value = model[metric]
         random_values = random_metrics[metric]
 
         random_mean = random_values.mean()
@@ -333,15 +381,15 @@ def compare_scores(
         random_95th = random_values.quantile(0.95)
 
         random_at_least_as_good_pct = (
-            (random_values >= frequency_value).mean() * 100
+            (random_values >= model_value).mean() * 100
         )
 
-        difference = frequency_value - random_mean
+        difference = model_value - random_mean
 
-        print(f"\n{label}")
-        print(f"  Frequency model: {frequency_value:.4f}")
-        print(f"  Random mean:     {random_mean:.4f}")
-        print(f"  Difference:      {difference:+.4f}")
+        print(f"\n{description}")
+        print(f"  {model_name}: {model_value:.4f}")
+        print(f"  Random mean: {random_mean:.4f}")
+        print(f"  Difference:  {difference:+.4f}")
         print(
             f"  Random 5th–95th percentile: "
             f"{random_5th:.4f}–{random_95th:.4f}"
@@ -353,16 +401,17 @@ def compare_scores(
 
         summary_rows.append({
             "game": game_name,
+            "model": model_name,
             "lookback_draws": lookback,
-            "evaluation_draws": len(frequency_scores),
+            "evaluation_draws": len(model_scores),
             "evaluation_start_date": (
-                frequency_scores["target_draw_date"].min()
+                model_scores["target_draw_date"].min()
             ),
             "evaluation_end_date": (
-                frequency_scores["target_draw_date"].max()
+                model_scores["target_draw_date"].max()
             ),
             "metric": metric,
-            "frequency_score": frequency_value,
+            "model_score": model_value,
             "random_mean": random_mean,
             "difference_vs_random_mean": difference,
             "random_5th_percentile": random_5th,
@@ -373,7 +422,6 @@ def compare_scores(
         })
 
     return summary_rows
-
 
 def compare_game(game_name, draws, special_column):
     """Compare all lookback windows on identical evaluation dates."""
@@ -457,13 +505,42 @@ def compare_game(game_name, draws, special_column):
 
         rows = compare_scores(
             game_name,
-            lookback,
+            "Frequency",
             frequency_scores,
             random_metrics,
+            lookback=lookback,
         )
 
         all_summary_rows.extend(rows)
+        # Compare Markov predictions on the same evaluation dates.
+    markov_path = MARKOV_DIR / f"{game_prefix}_markov.csv"
 
+    if not markov_path.exists():
+        raise FileNotFoundError(
+            f"Missing Markov predictions: {markov_path}. "
+            "Run python -m src.markov_model first."
+        )
+
+    markov_predictions = pd.read_csv(markov_path)
+
+    markov_predictions = filter_markov_to_common_dates(
+        markov_predictions,
+        common_dates,
+    )
+
+    markov_scores = score_predictions(
+        markov_predictions,
+        actual_results,
+    )
+
+    markov_rows = compare_scores(
+        game_name,
+        "Markov",
+        markov_scores,
+        random_metrics,
+    )
+
+    all_summary_rows.extend(markov_rows)
     # Save one random metrics row per simulation per game.
     random_metrics.insert(0, "game", game_name)
 

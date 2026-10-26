@@ -15,7 +15,9 @@ from src.lottery_data import (
     prepare_powerball,
 )
 from src.random_baseline import generate_next_random_prediction
-
+from src.markov_model import (
+    generate_next_draw_prediction as generate_markov_prediction,
+)
 
 # The lottery drawing schedules are based on Central Time.
 CENTRAL_TIME = ZoneInfo("America/Chicago")
@@ -194,6 +196,23 @@ def build_daily_predictions(draws_by_game, now=None):
                 game_name=config["game_name"],
                 model_name="Random baseline (control)",
                 prediction=random_prediction,
+            )
+        )
+        # One Markov-chain prediction using the available drawing history.
+        markov_prediction = generate_markov_prediction(
+            draws=draws,
+            special_column=config["special_column"],
+            white_pool_max=config["white_pool_max"],
+            special_pool_max=config["special_pool_max"],
+            target_draw_date=target_date,
+        )
+
+        records.append(
+            make_prediction_record(
+                generated_at=generated_at,
+                game_name=config["game_name"],
+                model_name="Markov",
+                prediction=markov_prediction,
             )
         )
 
